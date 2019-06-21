@@ -5,6 +5,8 @@ import au.com.dius.pact.consumer.PactProviderRuleMk2;
 import au.com.dius.pact.consumer.PactVerification;
 import au.com.dius.pact.consumer.dsl.PactDslWithProvider;
 import au.com.dius.pact.model.RequestResponsePact;
+import jdk.nashorn.internal.ir.annotations.Ignore;
+
 import com.ee.orderservice.OrderServiceController.OrderDetails;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Before;
@@ -30,63 +32,73 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
 @SpringBootTest(webEnvironment = DEFINED_PORT)
 public class OrderServiceTest {
 
-    public static final String USER_ID = "pareshId";
+	public static final String USER_ID = "pareshId";
 
-    @Autowired
-    private TestRestTemplate restTemplate;
+	@Autowired
+	private TestRestTemplate restTemplate;
 
-    @Rule
-    public PactProviderRuleMk2 mockDepartmentProvider = new PactProviderRuleMk2("user_service", "localhost", 8888, this);
+	@Rule
+	public PactProviderRuleMk2 mockDepartmentProvider = new PactProviderRuleMk2("user_service", "localhost", 8888,
+			this);
 
-    /**
-     * Setup the user service mock server. Method name can be anything but must be annotated with @pact
-     */
-    @Pact(provider = "user_service", consumer = "order_service")
-    public RequestResponsePact createPact(PactDslWithProvider builder) {
-        // TODO - Implement user service mock expectation required for OrderService.
-        // TODO - This will get translated into the contract between order service and user service.
-        return null;
-    }
+	/**
+	 * Setup the user service mock server. Method name can be anything but must be
+	 * annotated with @pact
+	 */
+	@Pact(provider = "user_service", consumer = "order_service")
+	public RequestResponsePact createPact(PactDslWithProvider builder) {
+		return builder.given("User Paresh exists")
+                .uponReceiving("user GET request")
+                .path("/user/" + USER_ID)
+                .method("GET")
+                .willRespondWith()
+                .status(200)
+                .body(newJsonBody((a) -> {
+                    a.stringValue("name", "paresh");
+                    a.stringValue("email", "paresh@ee.com");
+                    a.stringValue("address", "pune");
+                }).build()).toPact();
+	}
 
+	@Test
+	@PactVerification("user_service")
+	public void springWiringTest() {
+		// Given
+		OrderDetails orderDetails = new OrderDetails("productId", "1", USER_ID);
 
-    @Test
-    @PactVerification("user_service")
-    public void springWiringTest() {
-        // Given
-        OrderDetails orderDetails = new OrderDetails("productId", "1", USER_ID);
+		// When
+		OrderResponse orderResponse = restTemplate.postForObject("/order", getHttpRequest(orderDetails),
+				OrderResponse.class);
 
-        // When
-        OrderResponse orderResponse = restTemplate.postForObject("/order", getHttpRequest(orderDetails), OrderResponse.class);
+		// then
+		assertThat(orderResponse.getOrderId(), not(isEmptyOrNullString()));
+	}
 
-        // then
-        assertThat(orderResponse.getOrderId(), not(isEmptyOrNullString()));
-    }
+	static class OrderResponse {
+		private String orderId;
 
-    static class OrderResponse {
-        private String orderId;
+		public OrderResponse() {
+			// default constructor.
+		}
 
-        public OrderResponse() {
-            // default constructor.
-        }
+		public void setOrderId(String orderId) {
+			this.orderId = orderId;
+		}
 
-        public void setOrderId(String orderId) {
-            this.orderId = orderId;
-        }
+		public String getOrderId() {
+			return orderId;
+		}
+	}
 
-        public String getOrderId() {
-            return orderId;
-        }
-    }
+	@Before
+	public void setup() {
+		restTemplate.getRestTemplate().getMessageConverters().add(new MappingJackson2HttpMessageConverter());
+	}
 
-    @Before
-    public void setup() {
-        restTemplate.getRestTemplate().getMessageConverters().add(new MappingJackson2HttpMessageConverter());
-    }
-
-    @NotNull
-    private HttpEntity<OrderDetails> getHttpRequest(OrderDetails orderDetails) {
-        HttpHeaders httpHeaders = new HttpHeaders();
-        httpHeaders.setContentType(MediaType.APPLICATION_JSON_UTF8);
-        return new HttpEntity<>(orderDetails, httpHeaders);
-    }
+	@NotNull
+	private HttpEntity<OrderDetails> getHttpRequest(OrderDetails orderDetails) {
+		HttpHeaders httpHeaders = new HttpHeaders();
+		httpHeaders.setContentType(MediaType.APPLICATION_JSON_UTF8);
+		return new HttpEntity<>(orderDetails, httpHeaders);
+	}
 }
